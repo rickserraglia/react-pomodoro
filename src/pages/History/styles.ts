@@ -57,6 +57,10 @@ export const HistoryList = styled.div`
 				padding-right: 1.5rem;
 			}
 		}
+
+		.no-entries {
+			text-align: center;
+		}
 	}
 `;
 
