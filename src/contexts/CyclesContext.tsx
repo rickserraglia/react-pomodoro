@@ -1,17 +1,21 @@
-import { createContext, ReactNode, useState } from 'react';
+import { differenceInSeconds } from 'date-fns';
+import {
+	createContext,
+	ReactNode,
+	useState,
+	useReducer,
+	useEffect
+} from 'react';
+import {
+	addNewCycleAction,
+	interruptCurrentCycleAction,
+	markCurrentCycleAsDoneAction
+} from '../reducers/cycles/actions';
+import { Cycle, cyclesReducer } from '../reducers/cycles/reducer';
 
 interface CreateCycleData {
 	task: string;
 	minutesAmount: number;
-}
-
-interface Cycle {
-	id: string;
-	task: string;
-	minutesAmount: number;
-	startDate: Date;
-	interruptionDate?: Date;
-	doneDate?: Date;
 }
 
 interface CyclesContextType {
@@ -21,7 +25,6 @@ interface CyclesContextType {
 	amountSecondsPassed: number;
 	markCurrentCycleAsDone: () => void;
 	setSecondsPassed: (seconds: number) => void;
-	resetCycleId: () => void;
 	createNewCycle: (data: CreateCycleData) => void;
 	interruptCurrentCycle: () => void;
 }
@@ -35,11 +38,38 @@ interface CyclesContextProviderProps {
 export const CyclesContextProvider = ({
 	children
 }: CyclesContextProviderProps) => {
-	const [cycles, setCycles] = useState<Cycle[]>([]);
-	const [activeCycleId, setActiveCycleId] = useState<string | null>(null);
-	const [amountSecondsPassed, setAmountSecondsPassed] = useState(0);
+	const [cyclesState, dispatch] = useReducer(
+		cyclesReducer,
+		{
+			cycles: [],
+			activeCycleId: null
+		},
+		() => {
+			const storedStateAsJSON = localStorage.getItem(
+				'@pomodoro-timer:cycles-state-1.0.0'
+			);
 
+			if (storedStateAsJSON) {
+				return JSON.parse(storedStateAsJSON);
+			}
+		}
+	);
+
+	const { cycles, activeCycleId } = cyclesState;
 	const activeCycle = cycles.find((cycle) => cycle.id === activeCycleId);
+
+	const [amountSecondsPassed, setAmountSecondsPassed] = useState(() => {
+		if (activeCycle) {
+			return differenceInSeconds(new Date(), new Date(activeCycle.startDate));
+		}
+
+		return 0;
+	});
+
+	useEffect(() => {
+		const stateJSON = JSON.stringify(cyclesState);
+		localStorage.setItem('@pomodoro-timer:cycles-state-1.0.0', stateJSON);
+	}, [cyclesState]);
 
 	const createNewCycle = (data: CreateCycleData) => {
 		const newCycle: Cycle = {
@@ -50,22 +80,12 @@ export const CyclesContextProvider = ({
 			minutesAmount: data.minutesAmount,
 			startDate: new Date()
 		};
-		setCycles((state) => [...state, newCycle]);
-		setActiveCycleId(newCycle.id);
+		dispatch(addNewCycleAction(newCycle));
 		setAmountSecondsPassed(0);
 	};
 
 	function interruptCurrentCycle() {
-		setCycles((state) =>
-			state.map((cycle) => {
-				if (cycle.id === activeCycleId) {
-					return { ...cycle, interruptionDate: new Date() };
-				} else {
-					return cycle;
-				}
-			})
-		);
-		setActiveCycleId(null);
+		dispatch(interruptCurrentCycleAction());
 	}
 
 	const setSecondsPassed = (seconds: number) => {
@@ -73,18 +93,8 @@ export const CyclesContextProvider = ({
 	};
 
 	const markCurrentCycleAsDone = () => {
-		setCycles((state) =>
-			state.map((cycle) => {
-				if (cycle.id === activeCycleId) {
-					return { ...cycle, doneDate: new Date() };
-				} else {
-					return cycle;
-				}
-			})
-		);
+		dispatch(markCurrentCycleAsDoneAction());
 	};
-
-	const resetCycleId = () => setActiveCycleId(null);
 
 	return (
 		<CyclesContext.Provider
@@ -96,7 +106,6 @@ export const CyclesContextProvider = ({
 				markCurrentCycleAsDone,
 				amountSecondsPassed,
 				setSecondsPassed,
-				resetCycleId,
 				createNewCycle,
 				interruptCurrentCycle
 			}}
